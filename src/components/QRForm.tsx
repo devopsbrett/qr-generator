@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   EmailData,
   GeoData,
@@ -8,9 +8,11 @@ import type {
   VCardData,
   WiFiData,
 } from "@qr-styled/node";
+import { ChevronDown } from "lucide-react";
+import { cn } from "cn";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "./ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 
 export type { QROptions };
@@ -54,11 +56,95 @@ const selectClassName =
 
 const checkboxClassName = "h-4 w-4 shrink-0 accent-current";
 
+type FormSectionId = "content" | "canvas" | "colors" | "gradient" | "eyes" | "logo";
+
+const SECTION_TITLES: Record<FormSectionId, string> = {
+  content: "Content",
+  canvas: "Canvas",
+  colors: "Colors & modules",
+  gradient: "Gradient",
+  eyes: "Eyes",
+  logo: "Logo",
+};
+
+function FormSection({
+  id,
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  id: FormSectionId;
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const buttonId = `qr-section-${id}-button`;
+  const contentId = `qr-section-${id}`;
+  return (
+    <section aria-labelledby={buttonId} className="flex flex-col gap-4">
+      <div className="relative flex items-center gap-2">
+        <div aria-hidden="true" className="h-px flex-1 bg-border" />
+        <button
+          type="button"
+          id={buttonId}
+          aria-expanded={open}
+          aria-controls={contentId}
+          onClick={onToggle}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        >
+          <span>{title}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("size-3.5 transition-transform duration-200", !open && "-rotate-90")}
+          />
+          <span className="sr-only">{open ? "Collapse section" : "Expand section"}</span>
+        </button>
+        <div aria-hidden="true" className="h-px flex-1 bg-border" />
+      </div>
+      {open ? (
+        <div
+          id={contentId}
+          role="region"
+          aria-labelledby={buttonId}
+          className="flex flex-col gap-4"
+        >
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function QRForm({ initialValues, onChange, onSubmit, submitting }: QRFormProps) {
   const [options, setOptions] = useState<QROptions>({ ...DEFAULTS, ...initialValues });
   // Icon preview is only committed on blur so typing does not spam image loads.
   const [previewIcon, setPreviewIcon] = useState<string>(initialValues?.logo ?? "");
   const [previewError, setPreviewError] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<FormSectionId, boolean>>({
+    content: true,
+    canvas: true,
+    colors: true,
+    gradient: true,
+    eyes: true,
+    logo: true,
+  });
+
+  function toggleSection(id: FormSectionId) {
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function setAllSections(open: boolean) {
+    setOpenSections({
+      content: open,
+      canvas: open,
+      colors: open,
+      gradient: open,
+      eyes: open,
+      logo: open,
+    });
+  }
 
   function emit(next: QROptions) {
     setOptions(next);
@@ -88,11 +174,34 @@ export default function QRForm({ initialValues, onChange, onSubmit, submitting }
     | (VCardData & WiFiData & EmailData & SMSData & GeoData & Record<string, unknown>)
     | undefined;
 
+  const allCollapsed = (Object.values(openSections) as boolean[]).every((v) => !v);
+
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>QR Details</CardTitle>
         <CardDescription>Use the settings to configure the generated QR Code</CardDescription>
+        <div className="flex gap-1 pt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setAllSections(true)}
+            aria-label="Expand all sections"
+          >
+            Expand all
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => setAllSections(false)}
+            disabled={allCollapsed}
+            aria-label="Collapse all sections"
+          >
+            Collapse all
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <form
@@ -102,569 +211,609 @@ export default function QRForm({ initialValues, onChange, onSubmit, submitting }
           }}
         >
           <FieldGroup>
-            {/* Content */}
-            <Field>
-              <FieldLabel htmlFor="qr-type">Data type</FieldLabel>
-              <select
-                id="qr-type"
-                className={selectClassName}
-                value={options.type ?? "text"}
-                onChange={(e) => handleTypeChange(e.target.value as QRDataType)}
-              >
-                {DATA_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            {(options.type === "url" || options.type === "text" || options.type === undefined) && (
+            <FormSection
+              id="content"
+              title={SECTION_TITLES.content}
+              open={openSections.content}
+              onToggle={() => toggleSection("content")}
+            >
               <Field>
-                <FieldLabel htmlFor="qrlink">URL</FieldLabel>
-                <Input
-                  id="qrlink"
-                  value={options.url ?? ""}
-                  onChange={(e) => update("url", e.target.value)}
-                  placeholder="https://example.com"
-                />
+                <FieldLabel htmlFor="qr-type">Data type</FieldLabel>
+                <select
+                  id="qr-type"
+                  className={selectClassName}
+                  value={options.type ?? "text"}
+                  onChange={(e) => handleTypeChange(e.target.value as QRDataType)}
+                >
+                  {DATA_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
               </Field>
-            )}
 
-            {options.type === "vcard" && (
-              <FieldGroup>
-                <div className="grid grid-cols-2 gap-2">
+              {(options.type === "url" ||
+                options.type === "text" ||
+                options.type === undefined) && (
+                <Field>
+                  <FieldLabel htmlFor="qrlink">URL</FieldLabel>
+                  <Input
+                    id="qrlink"
+                    value={options.url ?? ""}
+                    onChange={(e) => update("url", e.target.value)}
+                    placeholder="https://example.com"
+                  />
+                </Field>
+              )}
+
+              {options.type === "vcard" && (
+                <FieldGroup>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="vcard-first">First name</FieldLabel>
+                      <Input
+                        id="vcard-first"
+                        value={data?.firstName ?? ""}
+                        onChange={(e) => updateData({ firstName: e.target.value })}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="vcard-last">Last name</FieldLabel>
+                      <Input
+                        id="vcard-last"
+                        value={data?.lastName ?? ""}
+                        onChange={(e) => updateData({ lastName: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="vcard-org">Organization</FieldLabel>
+                      <Input
+                        id="vcard-org"
+                        value={data?.organization ?? ""}
+                        onChange={(e) => updateData({ organization: e.target.value })}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="vcard-title">Title</FieldLabel>
+                      <Input
+                        id="vcard-title"
+                        value={data?.title ?? ""}
+                        onChange={(e) => updateData({ title: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="vcard-phone">Phone</FieldLabel>
+                      <Input
+                        id="vcard-phone"
+                        value={data?.phone ?? ""}
+                        onChange={(e) => updateData({ phone: e.target.value })}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="vcard-email">Email</FieldLabel>
+                      <Input
+                        id="vcard-email"
+                        type="email"
+                        value={data?.email ?? ""}
+                        onChange={(e) => updateData({ email: e.target.value })}
+                      />
+                    </Field>
+                  </div>
                   <Field>
-                    <FieldLabel htmlFor="vcard-first">First name</FieldLabel>
+                    <FieldLabel htmlFor="vcard-url">URL</FieldLabel>
                     <Input
-                      id="vcard-first"
-                      value={data?.firstName ?? ""}
-                      onChange={(e) => updateData({ firstName: e.target.value })}
+                      id="vcard-url"
+                      value={data?.url ?? ""}
+                      onChange={(e) => updateData({ url: e.target.value })}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="vcard-last">Last name</FieldLabel>
+                    <FieldLabel htmlFor="vcard-address">Address</FieldLabel>
                     <Input
-                      id="vcard-last"
-                      value={data?.lastName ?? ""}
-                      onChange={(e) => updateData({ lastName: e.target.value })}
+                      id="vcard-address"
+                      value={data?.address ?? ""}
+                      onChange={(e) => updateData({ address: e.target.value })}
                     />
                   </Field>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="vcard-city">City</FieldLabel>
+                      <Input
+                        id="vcard-city"
+                        value={data?.city ?? ""}
+                        onChange={(e) => updateData({ city: e.target.value })}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="vcard-state">State</FieldLabel>
+                      <Input
+                        id="vcard-state"
+                        value={data?.state ?? ""}
+                        onChange={(e) => updateData({ state: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="vcard-zip">ZIP</FieldLabel>
+                      <Input
+                        id="vcard-zip"
+                        value={data?.zip ?? ""}
+                        onChange={(e) => updateData({ zip: e.target.value })}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="vcard-country">Country</FieldLabel>
+                      <Input
+                        id="vcard-country"
+                        value={data?.country ?? ""}
+                        onChange={(e) => updateData({ country: e.target.value })}
+                      />
+                    </Field>
+                  </div>
+                </FieldGroup>
+              )}
+
+              {options.type === "wifi" && (
+                <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="vcard-org">Organization</FieldLabel>
+                    <FieldLabel htmlFor="wifi-ssid">SSID</FieldLabel>
                     <Input
-                      id="vcard-org"
-                      value={data?.organization ?? ""}
-                      onChange={(e) => updateData({ organization: e.target.value })}
+                      id="wifi-ssid"
+                      value={data?.ssid ?? ""}
+                      onChange={(e) => updateData({ ssid: e.target.value })}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="vcard-title">Title</FieldLabel>
+                    <FieldLabel htmlFor="wifi-password">Password</FieldLabel>
                     <Input
-                      id="vcard-title"
-                      value={data?.title ?? ""}
-                      onChange={(e) => updateData({ title: e.target.value })}
+                      id="wifi-password"
+                      type="password"
+                      value={data?.password ?? ""}
+                      onChange={(e) => updateData({ password: e.target.value })}
                     />
                   </Field>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field>
+                      <FieldLabel htmlFor="wifi-encryption">Encryption</FieldLabel>
+                      <select
+                        id="wifi-encryption"
+                        className={selectClassName}
+                        value={data?.encryption ?? "WPA"}
+                        onChange={(e) => updateData({ encryption: e.target.value })}
+                      >
+                        <option value="WPA">WPA</option>
+                        <option value="WEP">WEP</option>
+                        <option value="nopass">nopass</option>
+                      </select>
+                    </Field>
+                    <Field orientation="horizontal" className="items-end pb-1">
+                      <input
+                        id="wifi-hidden"
+                        type="checkbox"
+                        className={checkboxClassName}
+                        checked={Boolean(data?.hidden)}
+                        onChange={(e) => updateData({ hidden: e.target.checked })}
+                      />
+                      <FieldLabel htmlFor="wifi-hidden">Hidden network</FieldLabel>
+                    </Field>
+                  </div>
+                </FieldGroup>
+              )}
+
+              {options.type === "email" && (
+                <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="vcard-phone">Phone</FieldLabel>
+                    <FieldLabel htmlFor="email-to">Email</FieldLabel>
                     <Input
-                      id="vcard-phone"
-                      value={data?.phone ?? ""}
-                      onChange={(e) => updateData({ phone: e.target.value })}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="vcard-email">Email</FieldLabel>
-                    <Input
-                      id="vcard-email"
+                      id="email-to"
                       type="email"
                       value={data?.email ?? ""}
                       onChange={(e) => updateData({ email: e.target.value })}
                     />
                   </Field>
-                </div>
-                <Field>
-                  <FieldLabel htmlFor="vcard-url">URL</FieldLabel>
-                  <Input
-                    id="vcard-url"
-                    value={data?.url ?? ""}
-                    onChange={(e) => updateData({ url: e.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="vcard-address">Address</FieldLabel>
-                  <Input
-                    id="vcard-address"
-                    value={data?.address ?? ""}
-                    onChange={(e) => updateData({ address: e.target.value })}
-                  />
-                </Field>
-                <div className="grid grid-cols-2 gap-2">
                   <Field>
-                    <FieldLabel htmlFor="vcard-city">City</FieldLabel>
+                    <FieldLabel htmlFor="email-subject">Subject</FieldLabel>
                     <Input
-                      id="vcard-city"
-                      value={data?.city ?? ""}
-                      onChange={(e) => updateData({ city: e.target.value })}
+                      id="email-subject"
+                      value={data?.subject ?? ""}
+                      onChange={(e) => updateData({ subject: e.target.value })}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="vcard-state">State</FieldLabel>
+                    <FieldLabel htmlFor="email-body">Body</FieldLabel>
                     <Input
-                      id="vcard-state"
-                      value={data?.state ?? ""}
-                      onChange={(e) => updateData({ state: e.target.value })}
-                    />
-                  </Field>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field>
-                    <FieldLabel htmlFor="vcard-zip">ZIP</FieldLabel>
-                    <Input
-                      id="vcard-zip"
-                      value={data?.zip ?? ""}
-                      onChange={(e) => updateData({ zip: e.target.value })}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="vcard-country">Country</FieldLabel>
-                    <Input
-                      id="vcard-country"
-                      value={data?.country ?? ""}
-                      onChange={(e) => updateData({ country: e.target.value })}
-                    />
-                  </Field>
-                </div>
-              </FieldGroup>
-            )}
-
-            {options.type === "wifi" && (
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="wifi-ssid">SSID</FieldLabel>
-                  <Input
-                    id="wifi-ssid"
-                    value={data?.ssid ?? ""}
-                    onChange={(e) => updateData({ ssid: e.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="wifi-password">Password</FieldLabel>
-                  <Input
-                    id="wifi-password"
-                    type="password"
-                    value={data?.password ?? ""}
-                    onChange={(e) => updateData({ password: e.target.value })}
-                  />
-                </Field>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field>
-                    <FieldLabel htmlFor="wifi-encryption">Encryption</FieldLabel>
-                    <select
-                      id="wifi-encryption"
-                      className={selectClassName}
-                      value={data?.encryption ?? "WPA"}
-                      onChange={(e) => updateData({ encryption: e.target.value })}
-                    >
-                      <option value="WPA">WPA</option>
-                      <option value="WEP">WEP</option>
-                      <option value="nopass">nopass</option>
-                    </select>
-                  </Field>
-                  <Field orientation="horizontal" className="items-end pb-1">
-                    <input
-                      id="wifi-hidden"
-                      type="checkbox"
-                      className={checkboxClassName}
-                      checked={Boolean(data?.hidden)}
-                      onChange={(e) => updateData({ hidden: e.target.checked })}
-                    />
-                    <FieldLabel htmlFor="wifi-hidden">Hidden network</FieldLabel>
-                  </Field>
-                </div>
-              </FieldGroup>
-            )}
-
-            {options.type === "email" && (
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="email-to">Email</FieldLabel>
-                  <Input
-                    id="email-to"
-                    type="email"
-                    value={data?.email ?? ""}
-                    onChange={(e) => updateData({ email: e.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="email-subject">Subject</FieldLabel>
-                  <Input
-                    id="email-subject"
-                    value={data?.subject ?? ""}
-                    onChange={(e) => updateData({ subject: e.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="email-body">Body</FieldLabel>
-                  <Input
-                    id="email-body"
-                    value={data?.body ?? ""}
-                    onChange={(e) => updateData({ body: e.target.value })}
-                  />
-                </Field>
-              </FieldGroup>
-            )}
-
-            {options.type === "sms" && (
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="sms-phone">Phone</FieldLabel>
-                  <Input
-                    id="sms-phone"
-                    type="tel"
-                    value={data?.phone ?? ""}
-                    onChange={(e) => updateData({ phone: e.target.value })}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="sms-message">Message</FieldLabel>
-                  <Input
-                    id="sms-message"
-                    value={data?.message ?? ""}
-                    onChange={(e) => updateData({ message: e.target.value })}
-                  />
-                </Field>
-              </FieldGroup>
-            )}
-
-            {options.type === "geo" && (
-              <div className="grid grid-cols-2 gap-2">
-                <Field>
-                  <FieldLabel htmlFor="geo-lat">Latitude</FieldLabel>
-                  <Input
-                    id="geo-lat"
-                    type="number"
-                    step="any"
-                    value={data?.latitude ?? ""}
-                    onChange={(e) =>
-                      updateData({
-                        latitude: e.target.value === "" ? undefined : Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="geo-lng">Longitude</FieldLabel>
-                  <Input
-                    id="geo-lng"
-                    type="number"
-                    step="any"
-                    value={data?.longitude ?? ""}
-                    onChange={(e) =>
-                      updateData({
-                        longitude: e.target.value === "" ? undefined : Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
-              </div>
-            )}
-
-            <FieldSeparator>Canvas</FieldSeparator>
-            <div className="grid grid-cols-2 gap-2">
-              <Field>
-                <FieldLabel htmlFor="qr-size">Size (px)</FieldLabel>
-                <Input
-                  id="qr-size"
-                  type="number"
-                  min={64}
-                  value={options.size ?? DEFAULTS.size}
-                  onChange={(e) => update("size", Number(e.target.value))}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="qr-corner">Corner radius</FieldLabel>
-                <Input
-                  id="qr-corner"
-                  type="number"
-                  min={0}
-                  value={options.cornerRadius ?? DEFAULTS.cornerRadius}
-                  onChange={(e) => update("cornerRadius", Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Field>
-                <FieldLabel htmlFor="qr-margin">Margin (modules)</FieldLabel>
-                <Input
-                  id="qr-margin"
-                  type="number"
-                  min={0}
-                  value={options.margin ?? DEFAULTS.margin}
-                  onChange={(e) => update("margin", Number(e.target.value))}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="qr-padding">Padding (px)</FieldLabel>
-                <Input
-                  id="qr-padding"
-                  type="number"
-                  min={0}
-                  value={options.padding ?? DEFAULTS.padding}
-                  onChange={(e) => update("padding", Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <Field>
-              <FieldLabel htmlFor="qr-ecc">Error correction</FieldLabel>
-              <select
-                id="qr-ecc"
-                className={selectClassName}
-                value={options.errorCorrectionLevel ?? "H"}
-                onChange={(e) =>
-                  update(
-                    "errorCorrectionLevel",
-                    e.target.value as QROptions["errorCorrectionLevel"],
-                  )
-                }
-              >
-                <option value="L">L (low)</option>
-                <option value="M">M (medium)</option>
-                <option value="Q">Q (quartile)</option>
-                <option value="H">H (high)</option>
-              </select>
-            </Field>
-
-            <FieldSeparator>Colors &amp; modules</FieldSeparator>
-            <div className="grid grid-cols-2 gap-2">
-              <Field>
-                <FieldLabel htmlFor="bg-color">Background Color</FieldLabel>
-                <Input
-                  id="bg-color"
-                  type="color"
-                  value={options.backgroundColor ?? DEFAULTS.backgroundColor}
-                  onChange={(e) => update("backgroundColor", e.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="fg-color">Foreground Color</FieldLabel>
-                <Input
-                  id="fg-color"
-                  type="color"
-                  value={options.foregroundColor ?? DEFAULTS.foregroundColor}
-                  onChange={(e) => update("foregroundColor", e.target.value)}
-                />
-              </Field>
-            </div>
-            <Field orientation="horizontal">
-              <input
-                id="qr-rounded"
-                type="checkbox"
-                className={checkboxClassName}
-                checked={options.rounded ?? true}
-                onChange={(e) => update("rounded", e.target.checked)}
-              />
-              <FieldLabel htmlFor="qr-rounded">Rounded modules</FieldLabel>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="qr-module-radius">
-                Module radius ({options.moduleRadius ?? 0.35})
-              </FieldLabel>
-              <Input
-                id="qr-module-radius"
-                type="range"
-                min={0}
-                max={0.5}
-                step={0.05}
-                value={options.moduleRadius ?? DEFAULTS.moduleRadius}
-                onChange={(e) => update("moduleRadius", Number(e.target.value))}
-              />
-              <FieldDescription>Corner radius per module, 0.0 – 0.5.</FieldDescription>
-            </Field>
-
-            <FieldSeparator>Gradient</FieldSeparator>
-            <Field orientation="horizontal">
-              <input
-                id="qr-gradient"
-                type="checkbox"
-                className={checkboxClassName}
-                checked={options.gradient ?? false}
-                onChange={(e) => update("gradient", e.target.checked)}
-              />
-              <FieldLabel htmlFor="qr-gradient">Enable gradient</FieldLabel>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="qr-gradient-colors">Gradient colors</FieldLabel>
-              <Input
-                id="qr-gradient-colors"
-                value={options.gradientColors ?? ""}
-                onChange={(e) => update("gradientColors", e.target.value)}
-                placeholder="#FEDA75,#FA7E1E,#D62976"
-                disabled={!options.gradient}
-              />
-              <FieldDescription>Comma-separated colors.</FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="qr-gradient-angle">
-                Gradient angle ({options.gradientAngle ?? 45}°)
-              </FieldLabel>
-              <Input
-                id="qr-gradient-angle"
-                type="number"
-                min={0}
-                max={360}
-                value={options.gradientAngle ?? DEFAULTS.gradientAngle}
-                onChange={(e) => update("gradientAngle", Number(e.target.value))}
-                disabled={!options.gradient}
-              />
-            </Field>
-
-            <FieldSeparator>Eyes</FieldSeparator>
-            <div className="grid grid-cols-2 gap-2">
-              <Field>
-                <FieldLabel htmlFor="qr-eye-shape">Eye shape</FieldLabel>
-                <select
-                  id="qr-eye-shape"
-                  className={selectClassName}
-                  value={options.eyeShape ?? "square"}
-                  onChange={(e) => update("eyeShape", e.target.value as QROptions["eyeShape"])}
-                >
-                  <option value="square">square</option>
-                  <option value="rounded">rounded</option>
-                  <option value="circle">circle</option>
-                </select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="qr-eye-color">Eye color</FieldLabel>
-                <Input
-                  id="qr-eye-color"
-                  type="color"
-                  value={options.eyeColor || "#000000"}
-                  onChange={(e) => update("eyeColor", e.target.value)}
-                />
-              </Field>
-            </div>
-            <Field>
-              <FieldLabel htmlFor="qr-eye-radius">Eye radius ({options.eyeRadius ?? 0})</FieldLabel>
-              <Input
-                id="qr-eye-radius"
-                type="range"
-                min={0}
-                max={0.5}
-                step={0.05}
-                value={options.eyeRadius ?? 0}
-                onChange={(e) => update("eyeRadius", Number(e.target.value))}
-              />
-            </Field>
-
-            <FieldSeparator>Logo</FieldSeparator>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <FieldGroup>
-                  <Field>
-                    <FieldLabel htmlFor="icon-url">Logo Image URL</FieldLabel>
-                    <Input
-                      id="icon-url"
-                      value={options.logo ?? ""}
-                      onChange={(e) => {
-                        setPreviewError(false);
-                        update("logo", e.target.value);
-                      }}
-                      onBlur={(e) => {
-                        const next = e.target.value.trim();
-                        setPreviewError(false);
-                        setPreviewIcon(next);
-                      }}
-                      placeholder="https://example.com/logo.png"
-                    />
-                    <FieldDescription>Preview loads on blur, to the right.</FieldDescription>
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="logo-size">Logo size (px)</FieldLabel>
-                    <Input
-                      id="logo-size"
-                      type="number"
-                      min={0}
-                      value={options.logoSize ?? DEFAULTS.logoSize}
-                      onChange={(e) => update("logoSize", Number(e.target.value))}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="logo-padding">Logo padding (px)</FieldLabel>
-                    <Input
-                      id="logo-padding"
-                      type="number"
-                      min={0}
-                      value={options.logoPadding ?? DEFAULTS.logoPadding}
-                      onChange={(e) => update("logoPadding", Number(e.target.value))}
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field>
-                      <FieldLabel htmlFor="logo-shape">Logo shape</FieldLabel>
-                      <select
-                        id="logo-shape"
-                        className={selectClassName}
-                        value={options.logoShape ?? "circle"}
-                        onChange={(e) =>
-                          update("logoShape", e.target.value as QROptions["logoShape"])
-                        }
-                      >
-                        <option value="circle">circle</option>
-                        <option value="square">square</option>
-                      </select>
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="logo-bg">Logo background</FieldLabel>
-                      <Input
-                        id="logo-bg"
-                        type="color"
-                        value={options.logoBackgroundColor ?? DEFAULTS.logoBackgroundColor}
-                        onChange={(e) => update("logoBackgroundColor", e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                  <Field>
-                    <FieldLabel htmlFor="logo-radius">Logo radius (square)</FieldLabel>
-                    <Input
-                      id="logo-radius"
-                      type="number"
-                      min={0}
-                      value={options.logoRadius ?? DEFAULTS.logoRadius}
-                      onChange={(e) => update("logoRadius", Number(e.target.value))}
+                      id="email-body"
+                      value={data?.body ?? ""}
+                      onChange={(e) => updateData({ body: e.target.value })}
                     />
                   </Field>
                 </FieldGroup>
+              )}
+
+              {options.type === "sms" && (
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="sms-phone">Phone</FieldLabel>
+                    <Input
+                      id="sms-phone"
+                      type="tel"
+                      value={data?.phone ?? ""}
+                      onChange={(e) => updateData({ phone: e.target.value })}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="sms-message">Message</FieldLabel>
+                    <Input
+                      id="sms-message"
+                      value={data?.message ?? ""}
+                      onChange={(e) => updateData({ message: e.target.value })}
+                    />
+                  </Field>
+                </FieldGroup>
+              )}
+
+              {options.type === "geo" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Field>
+                    <FieldLabel htmlFor="geo-lat">Latitude</FieldLabel>
+                    <Input
+                      id="geo-lat"
+                      type="number"
+                      step="any"
+                      value={data?.latitude ?? ""}
+                      onChange={(e) =>
+                        updateData({
+                          latitude: e.target.value === "" ? undefined : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="geo-lng">Longitude</FieldLabel>
+                    <Input
+                      id="geo-lng"
+                      type="number"
+                      step="any"
+                      value={data?.longitude ?? ""}
+                      onChange={(e) =>
+                        updateData({
+                          longitude: e.target.value === "" ? undefined : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+              )}
+            </FormSection>
+
+            <FormSection
+              id="canvas"
+              title={SECTION_TITLES.canvas}
+              open={openSections.canvas}
+              onToggle={() => toggleSection("canvas")}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field>
+                  <FieldLabel htmlFor="qr-size">Size (px)</FieldLabel>
+                  <Input
+                    id="qr-size"
+                    type="number"
+                    min={64}
+                    value={options.size ?? DEFAULTS.size}
+                    onChange={(e) => update("size", Number(e.target.value))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="qr-corner">Corner radius</FieldLabel>
+                  <Input
+                    id="qr-corner"
+                    type="number"
+                    min={0}
+                    value={options.cornerRadius ?? DEFAULTS.cornerRadius}
+                    onChange={(e) => update("cornerRadius", Number(e.target.value))}
+                  />
+                </Field>
               </div>
-              <div>
-                {previewIcon ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 rounded-md border border-dashed p-2">
-                    {previewError ? (
-                      <p className="text-xs text-destructive">Could not load image.</p>
-                    ) : (
-                      <img
-                        src={previewIcon}
-                        alt="Logo preview"
-                        className="max-h-32 max-w-full object-contain"
-                        onError={() => setPreviewError(true)}
+              <div className="grid grid-cols-2 gap-2">
+                <Field>
+                  <FieldLabel htmlFor="qr-margin">Margin (modules)</FieldLabel>
+                  <Input
+                    id="qr-margin"
+                    type="number"
+                    min={0}
+                    value={options.margin ?? DEFAULTS.margin}
+                    onChange={(e) => update("margin", Number(e.target.value))}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="qr-padding">Padding (px)</FieldLabel>
+                  <Input
+                    id="qr-padding"
+                    type="number"
+                    min={0}
+                    value={options.padding ?? DEFAULTS.padding}
+                    onChange={(e) => update("padding", Number(e.target.value))}
+                  />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel htmlFor="qr-ecc">Error correction</FieldLabel>
+                <select
+                  id="qr-ecc"
+                  className={selectClassName}
+                  value={options.errorCorrectionLevel ?? "H"}
+                  onChange={(e) =>
+                    update(
+                      "errorCorrectionLevel",
+                      e.target.value as QROptions["errorCorrectionLevel"],
+                    )
+                  }
+                >
+                  <option value="L">L (low)</option>
+                  <option value="M">M (medium)</option>
+                  <option value="Q">Q (quartile)</option>
+                  <option value="H">H (high)</option>
+                </select>
+              </Field>
+            </FormSection>
+
+            <FormSection
+              id="colors"
+              title={SECTION_TITLES.colors}
+              open={openSections.colors}
+              onToggle={() => toggleSection("colors")}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field>
+                  <FieldLabel htmlFor="bg-color">Background Color</FieldLabel>
+                  <Input
+                    id="bg-color"
+                    type="color"
+                    value={options.backgroundColor ?? DEFAULTS.backgroundColor}
+                    onChange={(e) => update("backgroundColor", e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="fg-color">Foreground Color</FieldLabel>
+                  <Input
+                    id="fg-color"
+                    type="color"
+                    value={options.foregroundColor ?? DEFAULTS.foregroundColor}
+                    onChange={(e) => update("foregroundColor", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field orientation="horizontal">
+                <input
+                  id="qr-rounded"
+                  type="checkbox"
+                  className={checkboxClassName}
+                  checked={options.rounded ?? true}
+                  onChange={(e) => update("rounded", e.target.checked)}
+                />
+                <FieldLabel htmlFor="qr-rounded">Rounded modules</FieldLabel>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="qr-module-radius">
+                  Module radius ({options.moduleRadius ?? 0.35})
+                </FieldLabel>
+                <Input
+                  id="qr-module-radius"
+                  type="range"
+                  min={0}
+                  max={0.5}
+                  step={0.05}
+                  value={options.moduleRadius ?? DEFAULTS.moduleRadius}
+                  onChange={(e) => update("moduleRadius", Number(e.target.value))}
+                />
+                <FieldDescription>Corner radius per module, 0.0 – 0.5.</FieldDescription>
+              </Field>
+            </FormSection>
+
+            <FormSection
+              id="gradient"
+              title={SECTION_TITLES.gradient}
+              open={openSections.gradient}
+              onToggle={() => toggleSection("gradient")}
+            >
+              <Field orientation="horizontal">
+                <input
+                  id="qr-gradient"
+                  type="checkbox"
+                  className={checkboxClassName}
+                  checked={options.gradient ?? false}
+                  onChange={(e) => update("gradient", e.target.checked)}
+                />
+                <FieldLabel htmlFor="qr-gradient">Enable gradient</FieldLabel>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="qr-gradient-colors">Gradient colors</FieldLabel>
+                <Input
+                  id="qr-gradient-colors"
+                  value={options.gradientColors ?? ""}
+                  onChange={(e) => update("gradientColors", e.target.value)}
+                  placeholder="#FEDA75,#FA7E1E,#D62976"
+                  disabled={!options.gradient}
+                />
+                <FieldDescription>Comma-separated colors.</FieldDescription>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="qr-gradient-angle">
+                  Gradient angle ({options.gradientAngle ?? 45}°)
+                </FieldLabel>
+                <Input
+                  id="qr-gradient-angle"
+                  type="number"
+                  min={0}
+                  max={360}
+                  value={options.gradientAngle ?? DEFAULTS.gradientAngle}
+                  onChange={(e) => update("gradientAngle", Number(e.target.value))}
+                  disabled={!options.gradient}
+                />
+              </Field>
+            </FormSection>
+
+            <FormSection
+              id="eyes"
+              title={SECTION_TITLES.eyes}
+              open={openSections.eyes}
+              onToggle={() => toggleSection("eyes")}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Field>
+                  <FieldLabel htmlFor="qr-eye-shape">Eye shape</FieldLabel>
+                  <select
+                    id="qr-eye-shape"
+                    className={selectClassName}
+                    value={options.eyeShape ?? "square"}
+                    onChange={(e) => update("eyeShape", e.target.value as QROptions["eyeShape"])}
+                  >
+                    <option value="square">square</option>
+                    <option value="rounded">rounded</option>
+                    <option value="circle">circle</option>
+                  </select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="qr-eye-color">Eye color</FieldLabel>
+                  <Input
+                    id="qr-eye-color"
+                    type="color"
+                    value={options.eyeColor || "#000000"}
+                    onChange={(e) => update("eyeColor", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field>
+                <FieldLabel htmlFor="qr-eye-radius">
+                  Eye radius ({options.eyeRadius ?? 0})
+                </FieldLabel>
+                <Input
+                  id="qr-eye-radius"
+                  type="range"
+                  min={0}
+                  max={0.5}
+                  step={0.05}
+                  value={options.eyeRadius ?? 0}
+                  onChange={(e) => update("eyeRadius", Number(e.target.value))}
+                />
+              </Field>
+            </FormSection>
+
+            <FormSection
+              id="logo"
+              title={SECTION_TITLES.logo}
+              open={openSections.logo}
+              onToggle={() => toggleSection("logo")}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="icon-url">Logo Image URL</FieldLabel>
+                      <Input
+                        id="icon-url"
+                        value={options.logo ?? ""}
+                        onChange={(e) => {
+                          setPreviewError(false);
+                          update("logo", e.target.value);
+                        }}
+                        onBlur={(e) => {
+                          const next = e.target.value.trim();
+                          setPreviewError(false);
+                          setPreviewIcon(next);
+                        }}
+                        placeholder="https://example.com/logo.png"
                       />
-                    )}
-                    <p className="max-w-full truncate text-xs text-muted-foreground">
-                      {previewIcon}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex h-full items-center justify-center rounded-md border border-dashed p-2 text-xs text-muted-foreground">
-                    Image preview
-                  </div>
-                )}
+                      <FieldDescription>Preview loads on blur, to the right.</FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="logo-size">Logo size (px)</FieldLabel>
+                      <Input
+                        id="logo-size"
+                        type="number"
+                        min={0}
+                        value={options.logoSize ?? DEFAULTS.logoSize}
+                        onChange={(e) => update("logoSize", Number(e.target.value))}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="logo-padding">Logo padding (px)</FieldLabel>
+                      <Input
+                        id="logo-padding"
+                        type="number"
+                        min={0}
+                        value={options.logoPadding ?? DEFAULTS.logoPadding}
+                        onChange={(e) => update("logoPadding", Number(e.target.value))}
+                      />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field>
+                        <FieldLabel htmlFor="logo-shape">Logo shape</FieldLabel>
+                        <select
+                          id="logo-shape"
+                          className={selectClassName}
+                          value={options.logoShape ?? "circle"}
+                          onChange={(e) =>
+                            update("logoShape", e.target.value as QROptions["logoShape"])
+                          }
+                        >
+                          <option value="circle">circle</option>
+                          <option value="square">square</option>
+                        </select>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="logo-bg">Logo background</FieldLabel>
+                        <Input
+                          id="logo-bg"
+                          type="color"
+                          value={options.logoBackgroundColor ?? DEFAULTS.logoBackgroundColor}
+                          onChange={(e) => update("logoBackgroundColor", e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <Field>
+                      <FieldLabel htmlFor="logo-radius">Logo radius (square)</FieldLabel>
+                      <Input
+                        id="logo-radius"
+                        type="number"
+                        min={0}
+                        value={options.logoRadius ?? DEFAULTS.logoRadius}
+                        onChange={(e) => update("logoRadius", Number(e.target.value))}
+                      />
+                    </Field>
+                  </FieldGroup>
+                </div>
+                <div>
+                  {previewIcon ? (
+                    <div className="flex h-full flex-col items-center justify-center gap-2 rounded-md border border-dashed p-2">
+                      {previewError ? (
+                        <p className="text-xs text-destructive">Could not load image.</p>
+                      ) : (
+                        <img
+                          src={previewIcon}
+                          alt="Logo preview"
+                          className="max-h-32 max-w-full object-contain"
+                          onError={() => setPreviewError(true)}
+                        />
+                      )}
+                      <p className="max-w-full truncate text-xs text-muted-foreground">
+                        {previewIcon}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex h-full items-center justify-center rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                      Image preview
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </FormSection>
           </FieldGroup>
         </form>
       </CardContent>
