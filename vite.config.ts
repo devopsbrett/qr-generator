@@ -17,6 +17,11 @@ const config = defineConfig({
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },
   },
+  server: {
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
+  },
   resolve: { tsconfigPaths: true },
   plugins: lazyPlugins(() => [
     devtools(),
